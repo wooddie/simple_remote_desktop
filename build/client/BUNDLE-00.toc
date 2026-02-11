@@ -1,3 +1,0 @@
-([('client',
-   '/Users/kanapiya/Documents/remote_desc/dist/client',
-   'EXECUTABLE')],)
