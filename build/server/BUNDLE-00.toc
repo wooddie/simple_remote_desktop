@@ -1,0 +1,3 @@
+([('server',
+   '/Users/kanapiya/Documents/remote_desc/dist/server',
+   'EXECUTABLE')],)
