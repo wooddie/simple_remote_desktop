@@ -4,8 +4,9 @@ on: [push]
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
-        # Запускаем сборку параллельно на Windows и macOS
+        # Сборка для Windows и Mac
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
 
@@ -20,25 +21,20 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          python -m pip install --upgrade pip
           pip install pyinstaller
+          pip install -r requirements.txt
+        shell: bash
 
-      - name: Build with PyInstaller
+      - name: Build Server and Client
         run: |
-          # Сборка сервера
+          # Собираем два файла отдельно
           pyinstaller --onefile --noconsole server.py
-          # Сборка клиента
           pyinstaller --onefile --noconsole client.py
+        shell: bash
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-${{ matrix.os }}
-          # Загружаем всё содержимое папки dist (там будут оба файла)
-          path: dist/
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-${{ matrix.os }}
+          name: built-apps-${{ matrix.os }}
           path: dist/
