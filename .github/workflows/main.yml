@@ -25,8 +25,17 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          # --onefile делает один файл, --noconsole убирает окно терминала
-          pyinstaller --onefile --noconsole main.py
+          # Сборка сервера
+          pyinstaller --onefile --noconsole server.py
+          # Сборка клиента
+          pyinstaller --onefile --noconsole client.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ matrix.os }}
+          # Загружаем всё содержимое папки dist (там будут оба файла)
+          path: dist/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
