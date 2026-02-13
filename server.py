@@ -7,20 +7,18 @@ import io
 import pyautogui
 import threading
 
-HOST = '0.0.0.0'
+SERVER_IP = '85.198.90.118'
 PORT = 9001
 
 PACKET_VIDEO = 1
 PACKET_COMMAND = 2
 PACKET_SYSTEM = 0  # для служебных сообщений, например разрешение
+pyautogui.PAUSE = 0
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-s.bind((HOST, PORT))
-s.listen(1)
-print("Waiting for connection...")
-conn, addr = s.accept()
-print("Connected:", addr)
+s.connect((SERVER_IP, PORT))
+s.sendall(b'\x01') # Сообщаем серверу, что мы - ХОСТ
+conn = s # Теперь используем s как основное соединение
 
 def send_packet(sock, ptype, payload: bytes):
     header = struct.pack('!BI', ptype, len(payload))

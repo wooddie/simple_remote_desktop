@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 import time
 
-HOST = '127.0.0.1'
+SERVER_IP = '85.198.90.118'
 PORT = 9001
 
 PACKET_VIDEO = 1
@@ -16,7 +16,8 @@ window_w, window_h = 0, 0
 last_move = 0
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.connect((HOST, PORT))
+s.connect((SERVER_IP, PORT))
+s.sendall(b'\x02') # Сообщаем серверу, что мы - ВЬЮЕР
 
 def send_packet(sock, ptype, payload: bytes):
     header = struct.pack('!BI', ptype, len(payload))
@@ -94,3 +95,5 @@ try:
 finally:
     s.close()
     cv2.destroyAllWindows()
+
+# допилить интерфейс
