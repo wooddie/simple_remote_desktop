@@ -15,6 +15,13 @@ remote_w, remote_h = 1920, 1080
 window_w, window_h = 0, 0
 last_move = 0
 
+KEY_MAP = {
+    8: 'backspace', 9: 'tab', 13: 'enter', 27: 'esc', 32: 'space',
+    2555904: 'right', 2424832: 'left', 2490368: 'up', 2621440: 'down',
+    1900544: 'f1', 1966080: 'f2', 2031616: 'f3', 2097152: 'f4',
+    # Можно добавить другие спецклавиши
+}
+
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect((SERVER_IP, PORT))
 s.sendall(b'\x02') # Сообщаем серверу, что мы - ВЬЮЕР
@@ -90,10 +97,21 @@ try:
                 # Обновляем текущие размеры окна для корректных координат мыши
                 window_h, window_w = frame.shape[:2]
 
-        if cv2.waitKey(1) == 27: # ESC
-            break
+        key = cv2.waitKeyEx(1)
+        if key != -1:
+            if key == 27: break # ESC
+            
+            if key in KEY_MAP:
+                cmd = f"KEY_PRESS {KEY_MAP[key]}"
+                send_packet(s, PACKET_COMMAND, cmd.encode())
+            elif 32 <= key <= 126:
+                # chr(key) корректно передаст буквы и цифры
+                cmd = f"KEY_PRESS {chr(key)}"
+                send_packet(s, PACKET_COMMAND, cmd.encode())
+            else:
+                # Логируем неизвестные коды, чтобы добавить их в KEY_MAP
+                print(f"Unknown key code: {key}")
+
 finally:
     s.close()
     cv2.destroyAllWindows()
-
-# допилить интерфейс

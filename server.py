@@ -6,6 +6,18 @@ from PIL import Image
 import io
 import pyautogui
 import threading
+import platform
+
+# Динамический импорт pydirectinput только для Windows
+IS_WINDOWS = platform.system() == "Windows"
+if IS_WINDOWS:
+    try:
+        import pydirectinput
+    except ImportError:
+        IS_WINDOWS = False
+        print("pydirectinput not found, falling back to pyautogui")
+
+pyautogui.PAUSE = 0
 
 SERVER_IP = '85.198.90.118'
 PORT = 9001
@@ -49,23 +61,30 @@ print(f"Sent screen resolution to client: {screen_w}x{screen_h}")
 
 def handle_command(cmd):
     parts = cmd.split()
-    if not parts:
-        return
+    if not parts: return
 
     action = parts[0]
-    if action == "MOVE" and len(parts) == 3:
-        x, y = int(parts[1]), int(parts[2])
-        x = max(0, min(x, screen_w - 1))
-        y = max(0, min(y, screen_h - 1))
-        pyautogui.moveTo(x, y)
-    elif action == "CLICK" and len(parts) == 2:
-        button = parts[1].lower()
-        pyautogui.click(button=button)
-    elif action == "KEY_PRESS" and len(parts) == 2:
-        key = parts[1]
-        pyautogui.press(key)
-    else:
-        print("Unknown command:", cmd)
+    
+    # Выбор исполнителя (pydirectinput для Windows, pyautogui для остальных)
+    engine = pydirectinput if IS_WINDOWS else pyautogui
+
+    try:
+        if action == "MOVE" and len(parts) == 3:
+            x, y = int(parts[1]), int(parts[2])
+            x = max(0, min(x, screen_w - 1))
+            y = max(0, min(y, screen_h - 1))
+            engine.moveTo(x, y)
+            
+        elif action == "CLICK" and len(parts) == 2:
+            button = parts[1].lower()
+            engine.click(button=button)
+            
+        elif action == "KEY_PRESS" and len(parts) == 2:
+            key = parts[1]
+            engine.press(key)
+            
+    except Exception as e:
+        print(f"Error executing {action}: {e}")
 
 def command_thread():
     try:
