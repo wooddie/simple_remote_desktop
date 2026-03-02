@@ -11,7 +11,7 @@ PACKET_VIDEO = 1
 PACKET_COMMAND = 2
 
 # Начальные значения (обновятся сервером)
-remote_w, remote_h = 1920, 1080
+remote_w, remote_h = 1280, 720
 window_w, window_h = 0, 0
 last_move = 0
 
@@ -38,6 +38,7 @@ KEY_MAP = {
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect((SERVER_IP, PORT))
 s.sendall(b'\x02') # Сообщаем серверу, что мы - ВЬЮЕР
+s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 65536)
 
 def send_packet(sock, ptype, payload: bytes):
     header = struct.pack('!BI', ptype, len(payload))
@@ -67,7 +68,7 @@ def mouse_callback(event, x, y, flags, param):
     ry = int(y * remote_h / window_h)
 
     now = time.time()
-    if event == cv2.EVENT_MOUSEMOVE and now - last_move > 0.02:
+    if event == cv2.EVENT_MOUSEMOVE and now - last_move > 0.04:
         send_packet(s, PACKET_COMMAND, f"MOVE {rx} {ry}".encode())
         last_move = now
     elif event == cv2.EVENT_LBUTTONDOWN:

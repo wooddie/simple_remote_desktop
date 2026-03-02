@@ -3,10 +3,12 @@ import struct
 import time
 import mss
 from PIL import Image
-import io
+#import io
 import pyautogui
 import threading
 import platform
+import numpy as np
+import cv2
 
 # Динамический импорт pydirectinput только для Windows
 IS_WINDOWS = platform.system() == "Windows"
@@ -31,6 +33,7 @@ s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect((SERVER_IP, PORT))
 s.sendall(b'\x01') # Сообщаем серверу, что мы - ХОСТ
 conn = s # Теперь используем s как основное соединение
+conn.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
 
 def send_packet(sock, ptype, payload: bytes):
     header = struct.pack('!BI', ptype, len(payload))
@@ -102,20 +105,35 @@ def command_thread():
 threading.Thread(target=command_thread, daemon=True).start()
 
 # поток отправки экрана
-with mss.mss() as sct:
-    monitor = sct.monitors[1]  # основной монитор
-    while True:
-        screenshot = sct.grab(monitor)
-        img = Image.frombytes('RGB', screenshot.size, screenshot.rgb)
+target_fps = 30
+frame_time = 1 / target_fps
 
-        buf = io.BytesIO()
-        img.save(buf, format='JPEG', quality=50)
-        data = buf.getvalue()
+with mss.mss() as sct:
+    monitor = sct.monitors[1]
+
+    while True:
+        start = time.time()
+
+        screenshot = sct.grab(monitor)
+        frame = np.array(screenshot)
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+
+        # 🔥 уменьшить размер (очень важно)
+        frame = cv2.resize(frame, (1280, 720))
+
+        _, buffer = cv2.imencode(
+            '.jpg',
+            frame,
+            [int(cv2.IMWRITE_JPEG_QUALITY), 70]
+        )
+        data = buffer.tobytes()
 
         try:
             send_packet(conn, PACKET_VIDEO, data)
         except BrokenPipeError:
-            print("Client disconnected")
             break
 
-        time.sleep(0.03)  # ~30 FPS
+        elapsed = time.time() - start
+        sleep_time = frame_time - elapsed
+        if sleep_time > 0:
+            time.sleep(sleep_time)
