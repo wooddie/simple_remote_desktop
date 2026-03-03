@@ -40,6 +40,25 @@ s.connect((SERVER_IP, PORT))
 s.sendall(b'\x02') # Сообщаем серверу, что мы - ВЬЮЕР
 s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 65536)
 
+len_data = struct.unpack('!I', s.recv(4))[0]
+hosts = s.recv(len_data).decode()
+
+print(f"Доступные хосты: {hosts}")
+target_id = input("Введите ID хоста: ")
+target_pass = input("Введите пароль (6 знаков): ")
+
+# Отправляем выбор
+s.sendall(target_id.encode() + target_pass.encode())
+
+# Ждем ответа от сервера
+status = s.recv(2 if target_id else 4) # OK или FAIL
+if status == b"OK":
+    print("Подключено!")
+    # Далее запуск цикла видео...
+else:
+    print("Ошибка авторизации")
+    exit()
+
 def send_packet(sock, ptype, payload: bytes):
     header = struct.pack('!BI', ptype, len(payload))
     sock.sendall(header + payload)

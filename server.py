@@ -2,8 +2,8 @@ import socket
 import struct
 import time
 import mss
-from PIL import Image
-#import io
+#from PIL import Image
+import random
 import pyautogui
 import threading
 import platform
@@ -29,9 +29,15 @@ PACKET_COMMAND = 2
 PACKET_SYSTEM = 0  # для служебных сообщений, например разрешение
 pyautogui.PAUSE = 0
 
+host_id = str(random.randint(1000, 9999))
+password = str(random.randint(100000, 999999))
+
+print(f"YOUR ID: {host_id}")
+print(f"YOUR PASS: {password}")
+
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect((SERVER_IP, PORT))
-s.sendall(b'\x01') # Сообщаем серверу, что мы - ХОСТ
+s.sendall(b'\x01' + host_id.encode() + password.encode()) # Сообщаем серверу, что мы - ХОСТ
 conn = s # Теперь используем s как основное соединение
 conn.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
 
