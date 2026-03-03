@@ -45,7 +45,7 @@ hosts = s.recv(len_data).decode()
 
 print(f"Доступные хосты: {hosts}")
 target_id = input("Введите ID хоста: ")
-target_pass = input("Введите пароль (6 знаков): ")
+target_pass = input("Введите пароль: ")
 
 # Отправляем выбор
 s.sendall(target_id.encode() + target_pass.encode())
