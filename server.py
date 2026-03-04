@@ -2,7 +2,6 @@ import socket
 import struct
 import time
 import mss
-#from PIL import Image
 import random
 import pyautogui
 import threading
@@ -10,136 +9,133 @@ import platform
 import numpy as np
 import cv2
 
-# Динамический импорт pydirectinput только для Windows
+# Динамический импорт для Windows (DirectInput лучше работает в играх)
 IS_WINDOWS = platform.system() == "Windows"
 if IS_WINDOWS:
     try:
-        import pydirectinput
+        import pydirectinput as engine
     except ImportError:
-        IS_WINDOWS = False
-        print("pydirectinput not found, falling back to pyautogui")
+        import pyautogui as engine
+else:
+    import pyautogui as engine
 
 pyautogui.PAUSE = 0
 
 SERVER_IP = '85.198.90.118'
 PORT = 9001
-
-PACKET_VIDEO = 1
-PACKET_COMMAND = 2
-PACKET_SYSTEM = 0  # для служебных сообщений, например разрешение
-pyautogui.PAUSE = 0
+PACKET_VIDEO, PACKET_COMMAND, PACKET_SYSTEM = 1, 2, 0
 
 host_id = str(random.randint(1000, 9999))
 password = str(random.randint(100000, 999999))
-
-print(f"YOUR ID: {host_id}")
-print(f"YOUR PASS: {password}")
+print(f"YOUR ID: {host_id} | YOUR PASS: {password}")
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect((SERVER_IP, PORT))
-s.sendall(b'\x01' + host_id.encode() + password.encode()) # Сообщаем серверу, что мы - ХОСТ
-conn = s # Теперь используем s как основное соединение
-conn.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
+s.sendall(b'\x01' + host_id.encode() + password.encode())
+conn = s
+conn.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024) # Увеличили буфер до 1Мб
 
 def send_packet(sock, ptype, payload: bytes):
     header = struct.pack('!BI', ptype, len(payload))
     sock.sendall(header + payload)
 
-def recv_all(sock, size):
-    data = b''
-    while len(data) < size:
-        part = sock.recv(size - len(data))
-        if not part:
-            return None
-        data += part
-    return data
-
 def recv_packet(sock):
-    header = recv_all(sock, 5)
-    if not header:
-        return None, None
-    ptype, length = struct.unpack('!BI', header)
-    payload = recv_all(sock, length)
+    header_data = b''
+    while len(header_data) < 5:
+        chunk = sock.recv(5 - len(header_data))
+        if not chunk: return None, None
+        header_data += chunk
+    ptype, length = struct.unpack('!BI', header_data)
+    payload = b''
+    while len(payload) < length:
+        chunk = sock.recv(length - len(payload))
+        if not chunk: return None, None
+        payload += chunk
     return ptype, payload
 
-# Получаем реальное разрешение экрана и отправляем клиенту
+# Отправляем разрешение
 screen_w, screen_h = pyautogui.size()
-msg = f"RES {screen_w} {screen_h}".encode()
-send_packet(conn, PACKET_SYSTEM, msg)
-print(f"Sent screen resolution to client: {screen_w}x{screen_h}")
+send_packet(conn, PACKET_SYSTEM, f"RES {screen_w} {screen_h}".encode())
 
 def handle_command(cmd):
     parts = cmd.split()
     if not parts: return
-
     action = parts[0]
-    
-    # Выбор исполнителя (pydirectinput для Windows, pyautogui для остальных)
-    engine = pydirectinput if IS_WINDOWS else pyautogui
 
     try:
-        if action == "MOVE" and len(parts) == 3:
+        if action == "MOVE":
             x, y = int(parts[1]), int(parts[2])
-            x = max(0, min(x, screen_w - 1))
-            y = max(0, min(y, screen_h - 1))
-            engine.moveTo(x, y)
+            engine.moveTo(max(0, min(x, screen_w - 1)), max(0, min(y, screen_h - 1)))
             
-        elif action == "CLICK" and len(parts) == 2:
-            button = parts[1].lower()
-            engine.click(button=button)
-            
-        elif action == "KEY_PRESS" and len(parts) == 2:
-            key = parts[1]
-            engine.press(key)
-            
+        elif action == "KDOWN":
+            key = parts[1].lower()
+            if key in ['left', 'right']:
+                engine.mouseDown(button=key)
+            else:
+                # Маппинг клавиш (pynput шлет 'ctrl_l', pyautogui хочет 'ctrl')
+                if 'ctrl' in key: key = 'ctrl'
+                if 'shift' in key: key = 'shift'
+                if 'alt' in key: key = 'alt'
+                engine.keyDown(key)
+                
+        elif action == "KUP":
+            key = parts[1].lower()
+            if key in ['left', 'right']:
+                engine.mouseUp(button=key)
+            else:
+                if 'ctrl' in key: key = 'ctrl'
+                if 'shift' in key: key = 'shift'
+                if 'alt' in key: key = 'alt'
+                engine.keyUp(key)
     except Exception as e:
-        print(f"Error executing {action}: {e}")
+        pass
 
 def command_thread():
     try:
         while True:
             ptype, payload = recv_packet(conn)
-            if ptype is None:
-                print("Client disconnected")
-                break
+            if ptype is None: break
             if ptype == PACKET_COMMAND:
                 handle_command(payload.decode())
     finally:
         conn.close()
 
-# поток приёма команд
 threading.Thread(target=command_thread, daemon=True).start()
 
-# поток отправки экрана
-target_fps = 30
-frame_time = 1 / target_fps
+# --- ОТПРАВКА ВИДЕО С ДЕТЕКТОРОМ ИЗМЕНЕНИЙ ---
+last_frame_gray = None
 
 with mss.mss() as sct:
     monitor = sct.monitors[1]
-
     while True:
-        start = time.time()
+        start_time = time.time()
+        
+        # Захват и подготовка
+        img = np.array(sct.grab(monitor))
+        frame = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+        frame_resized = cv2.resize(frame, (1280, 720)) # Оптимально для передачи
 
-        screenshot = sct.grab(monitor)
-        frame = np.array(screenshot)
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+        # Проверка на изменения (детектор движения)
+        gray = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2GRAY)
+        gray = cv2.GaussianBlur(gray, (21, 21), 0) # Сглаживаем шумы
 
-        # 🔥 уменьшить размер (очень важно)
-        frame = cv2.resize(frame, (1280, 720))
+        if last_frame_gray is not None:
+            # Считаем разницу между кадрами
+            diff = cv2.absdiff(last_frame_gray, gray)
+            if np.mean(diff) < 0.5: # Порог чувствительности (0.5 - очень мало изменений)
+                time.sleep(0.03)
+                continue
+        
+        last_frame_gray = gray
 
-        _, buffer = cv2.imencode(
-            '.jpg',
-            frame,
-            [int(cv2.IMWRITE_JPEG_QUALITY), 70]
-        )
-        data = buffer.tobytes()
-
+        # Сжатие
+        _, buffer = cv2.imencode('.jpg', frame_resized, [int(cv2.IMWRITE_JPEG_QUALITY), 60])
+        
         try:
-            send_packet(conn, PACKET_VIDEO, data)
-        except BrokenPipeError:
+            send_packet(conn, PACKET_VIDEO, buffer.tobytes())
+        except:
             break
 
-        elapsed = time.time() - start
-        sleep_time = frame_time - elapsed
-        if sleep_time > 0:
-            time.sleep(sleep_time)
+        # Ограничение FPS (30 кадров)
+        elapsed = time.time() - start_time
+        time.sleep(max(0, (1/30) - elapsed))
